@@ -6,9 +6,38 @@ import numpy as np
 import pickle
 from typing import Optional
 import uvicorn
+import os
+import requests
 
 
-# Define the model architecture (must match your training)
+# ====  CONFIGURATION ====
+MODEL_FILE = "maize_yield_model.pth"
+SCALER_X_FILE = "scaler_X.pkl"
+SCALER_Y_FILE = "scaler_y.pkl"
+
+# Direct Google Drive download links
+MODEL_URL = "https://drive.google.com/uc?id=1TLNhNJTnxIfwU8vyn_TSfhU1H-UnA947"
+SCALER_X_URL = "https://drive.google.com/file/d/1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
+SCALER_Y_URL = "https://drive.google.com/file/d/1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
+
+
+def download_file(url, destination):
+    """Download file from URL if not already present"""
+    if not os.path.exists(destination):
+        print(f"Downloading {destination} from {url} ...")
+        response = requests.get(url)
+        if response.status_code != 200:
+            raise Exception(
+                f"Failed to download {destination} (status {response.status_code})"
+            )
+        with open(destination, "wb") as f:
+            f.write(response.content)
+        print(f" {destination} downloaded successfully.")
+    else:
+        print(f"{destination} already exists. Skipping download.")
+
+
+# ==== MODEL ARCHITECTURE ====
 class MaizeYieldNN(nn.Module):
     def __init__(self):
         super(MaizeYieldNN, self).__init__()
@@ -24,7 +53,7 @@ class MaizeYieldNN(nn.Module):
         return x
 
 
-# Request model
+# ====  REQUEST & RESPONSE MODELS ====
 class PredictionRequest(BaseModel):
     year: int = Field(..., ge=1985, le=2035, description="Year (1985-2035)")
     pesticides_tonnes: float = Field(
@@ -40,21 +69,19 @@ class PredictionRequest(BaseModel):
         }
 
 
-# Response model
 class PredictionResponse(BaseModel):
     predicted_yield: float
     unit: str = "hg/ha"
-    
+    warning: Optional[str] = None
 
 
-# Initialize FastAPI
+# ====  INITIALIZATION ====
 app = FastAPI(
     title="SmartGwiza Maize Yield Prediction API",
     description="API for predicting maize yield based on year, pesticides, and temperature",
     version="1.0.0",
 )
 
-# Global variables for model and scalers
 model = None
 scaler_X = None
 scaler_y = None
@@ -66,25 +93,26 @@ async def load_model():
     global model, scaler_X, scaler_y
 
     try:
-        # Load the trained model
+        #  Download model and scaler files if missing
+        download_file(MODEL_URL, MODEL_FILE)
+        download_file(SCALER_X_URL, SCALER_X_FILE)
+        download_file(SCALER_Y_URL, SCALER_Y_FILE)
+
+        # Load model
         model = MaizeYieldNN()
-        model.load_state_dict(
-            torch.load("maize_yield_model.pth", map_location=torch.device("cpu"))
-        )
+        model.load_state_dict(torch.load(MODEL_FILE, map_location=torch.device("cpu")))
         model.eval()
 
-        from sklearn.preprocessing import StandardScaler
-
-
-        with open("scaler_X.pkl", "rb") as f:
+        # Load scalers
+        with open(SCALER_X_FILE, "rb") as f:
             scaler_X = pickle.load(f)
-        with open("scaler_y.pkl", "rb") as f:
+        with open(SCALER_Y_FILE, "rb") as f:
             scaler_y = pickle.load(f)
 
-        print("Model and scalers loaded successfully!")
+        print(" Model and scalers loaded successfully!")
 
     except Exception as e:
-        print(f"Error loading model: {e}")
+        print(f" Error loading model: {e}")
         raise
 
 
@@ -96,39 +124,39 @@ def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
 
     warnings = []
 
-    # Clip with buffers
+    # Clip values
     year_clipped = max(min(year, year_range[1] + 5), year_range[0])
     pesticides_clipped = max(
         min(pesticides, pesticides_range[1] * 1.2), pesticides_range[0]
     )
     temp_clipped = max(min(temp, temp_range[1] + 0.5), temp_range[0] - 0.5)
 
-    # Generate warnings
+    # Warnings
     if temp < temp_range[0] - 0.5 or temp > temp_range[1] + 0.5:
         warnings.append(
             f"Temperature {temp}°C outside training range ({temp_range[0]}-{temp_range[1]}°C)"
         )
-
     if year < year_range[0] or year > year_range[1] + 5:
         warnings.append(
             f"Year {year} outside training range ({year_range[0]}-{year_range[1]+5})"
         )
-
     if pesticides < pesticides_range[0] or pesticides > pesticides_range[1] * 1.2:
         warnings.append(
             f"Pesticides {pesticides} tonnes outside training range ({pesticides_range[0]}-{pesticides_range[1]*1.2})"
         )
 
-    warning_text = "; ".join(warnings) if warnings else None
-
-    return year_clipped, pesticides_clipped, temp_clipped, warning_text
+    return (
+        year_clipped,
+        pesticides_clipped,
+        temp_clipped,
+        "; ".join(warnings) if warnings else None,
+    )
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
     return {
-        "message": "Maize Yield Prediction API",
+        "message": " SmartGwiza Maize Yield Prediction API",
         "endpoints": {
             "/predict": "POST - Make a prediction",
             "/health": "GET - Check API health",
@@ -139,7 +167,6 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     if model is None or scaler_X is None or scaler_y is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     return {"status": "healthy", "model_loaded": True}
@@ -147,30 +174,18 @@ async def health_check():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
-    """
-    Predict maize yield based on input parameters
-
-    - **year**: Year for prediction (1985-2035)
-    - **pesticides_tonnes**: Amount of pesticides used in tonnes
-    - **avg_temp**: Average temperature in Celsius
-    """
     if model is None or scaler_X is None or scaler_y is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     try:
-        # Validate and clip inputs
-        year_clipped, pesticides_clipped, temp_clipped, warning = (
-            validate_and_clip_inputs(
-                request.year, request.pesticides_tonnes, request.avg_temp
-            )
+        year, pesticides, temp, warning = validate_and_clip_inputs(
+            request.year, request.pesticides_tonnes, request.avg_temp
         )
 
-        # Prepare input
-        input_data = np.array([[year_clipped, pesticides_clipped, temp_clipped]])
+        input_data = np.array([[year, pesticides, temp]])
         input_scaled = scaler_X.transform(input_data)
         input_tensor = torch.tensor(input_scaled, dtype=torch.float32)
 
-        # Make prediction
         with torch.no_grad():
             pred_scaled = model(input_tensor)
             pred = scaler_y.inverse_transform(pred_scaled.numpy())
