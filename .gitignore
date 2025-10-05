@@ -1,4 +1,5 @@
 *.pth
 *.pkl
 __pycache__/
-.myenv
+myenv/
+venv/
