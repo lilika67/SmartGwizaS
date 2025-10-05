@@ -1,5 +1,14 @@
-*.pth
-*.pkl
-__pycache__/
+# Virtual environment
 myenv/
 venv/
+.env/
+
+# Large binary files
+*.pth
+*.pkl
+*.dylib
+*.so
+
+# Python cache files
+__pycache__/
+*.pyc
