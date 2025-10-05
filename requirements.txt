@@ -1,5 +1,3 @@
---upgrade
-pip
 setuptools>=69.0.0
 wheel
 numpy<2.0
