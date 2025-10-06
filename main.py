@@ -9,20 +9,19 @@ import uvicorn
 import os
 import requests
 
-
-# ====  CONFIGURATION ====
+# ==== CONFIGURATION ====
 MODEL_FILE = "maize_yield_model.pth"
 SCALER_X_FILE = "scaler_X.pkl"
 SCALER_Y_FILE = "scaler_y.pkl"
 
-# Direct Google Drive download links
+#  Google Drive direct download links
 MODEL_URL = "https://drive.google.com/uc?id=1TLNhNJTnxIfwU8vyn_TSfhU1H-UnA947"
-SCALER_X_URL = "https://drive.google.com/file/d/1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
-SCALER_Y_URL = "https://drive.google.com/file/d/1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
+SCALER_X_URL = "https://drive.google.com/uc?id=1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
+SCALER_Y_URL = "https://drive.google.com/uc?id=1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
 
 
 def download_file(url, destination):
-    """Download file from URL if not already present"""
+    """Download file from URL if not already present."""
     if not os.path.exists(destination):
         print(f"Downloading {destination} from {url} ...")
         response = requests.get(url)
@@ -32,7 +31,7 @@ def download_file(url, destination):
             )
         with open(destination, "wb") as f:
             f.write(response.content)
-        print(f" {destination} downloaded successfully.")
+        print(f"{destination} downloaded successfully.")
     else:
         print(f"{destination} already exists. Skipping download.")
 
@@ -53,9 +52,9 @@ class MaizeYieldNN(nn.Module):
         return x
 
 
-# ====  REQUEST & RESPONSE MODELS ====
+# ==== REQUEST & RESPONSE MODELS ====
 class PredictionRequest(BaseModel):
-    year: int = Field(..., ge=1985, le=2035, description="Year (1985-2035)")
+    year: int = Field(..., ge=1985, le=2035, description="Year (1985–2035)")
     pesticides_tonnes: float = Field(
         ..., ge=0, le=3000, description="Pesticides in tonnes"
     )
@@ -75,7 +74,7 @@ class PredictionResponse(BaseModel):
     warning: Optional[str] = None
 
 
-# ====  INITIALIZATION ====
+# ==== INITIALIZATION ====
 app = FastAPI(
     title="SmartGwiza Maize Yield Prediction API",
     description="API for predicting maize yield based on year, pesticides, and temperature",
@@ -89,11 +88,11 @@ scaler_y = None
 
 @app.on_event("startup")
 async def load_model():
-    """Load model and scalers on startup"""
+    """Load model and scalers on startup."""
     global model, scaler_X, scaler_y
 
     try:
-        #  Download model and scaler files if missing
+        # Download model and scaler files if missing
         download_file(MODEL_URL, MODEL_FILE)
         download_file(SCALER_X_URL, SCALER_X_FILE)
         download_file(SCALER_Y_URL, SCALER_Y_FILE)
@@ -109,15 +108,19 @@ async def load_model():
         with open(SCALER_Y_FILE, "rb") as f:
             scaler_y = pickle.load(f)
 
+        # Verify everything is loaded
+        if model is None or scaler_X is None or scaler_y is None:
+            raise ValueError("Model or scalers failed to load properly.")
+
         print(" Model and scalers loaded successfully!")
 
     except Exception as e:
         print(f" Error loading model: {e}")
-        raise
+        raise HTTPException(status_code=500, detail=f"Model loading error: {str(e)}")
 
 
 def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
-    """Validate inputs and return clipped values with warnings"""
+    """Validate inputs and return clipped values with warnings."""
     year_range = (1990, 2023)
     pesticides_range = (97, 2500)
     temp_range = (19.22, 20.29)
@@ -134,15 +137,15 @@ def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
     # Warnings
     if temp < temp_range[0] - 0.5 or temp > temp_range[1] + 0.5:
         warnings.append(
-            f"Temperature {temp}°C outside training range ({temp_range[0]}-{temp_range[1]}°C)"
+            f"Temperature {temp}°C outside training range ({temp_range[0]}–{temp_range[1]}°C)"
         )
     if year < year_range[0] or year > year_range[1] + 5:
         warnings.append(
-            f"Year {year} outside training range ({year_range[0]}-{year_range[1]+5})"
+            f"Year {year} outside training range ({year_range[0]}–{year_range[1] + 5})"
         )
     if pesticides < pesticides_range[0] or pesticides > pesticides_range[1] * 1.2:
         warnings.append(
-            f"Pesticides {pesticides} tonnes outside training range ({pesticides_range[0]}-{pesticides_range[1]*1.2})"
+            f"Pesticides {pesticides} tonnes outside training range ({pesticides_range[0]}–{pesticides_range[1] * 1.2})"
         )
 
     return (
@@ -158,9 +161,9 @@ async def root():
     return {
         "message": " SmartGwiza Maize Yield Prediction API",
         "endpoints": {
-            "/predict": "POST - Make a prediction",
-            "/health": "GET - Check API health",
-            "/docs": "GET - Interactive API documentation",
+            "/predict": "POST → Make a prediction",
+            "/health": "GET → Check API health",
+            "/docs": "GET → Interactive API documentation",
         },
     }
 
@@ -201,4 +204,4 @@ async def predict(request: PredictionRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
