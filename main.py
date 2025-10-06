@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware  # Add this import
 from pydantic import BaseModel, Field
 import torch
 import torch.nn as nn
@@ -14,7 +15,6 @@ MODEL_FILE = "maize_yield_model.pth"
 SCALER_X_FILE = "scaler_X.pkl"
 SCALER_Y_FILE = "scaler_y.pkl"
 
-#  Google Drive direct download links
 MODEL_URL = "https://drive.google.com/uc?id=1TLNhNJTnxIfwU8vyn_TSfhU1H-UnA947"
 SCALER_X_URL = "https://drive.google.com/uc?id=1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
 SCALER_Y_URL = "https://drive.google.com/uc?id=1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
@@ -81,6 +81,17 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "*"
+    ],  # Replace with specific origins in production (e.g., ["https://your-vercel-app.vercel.app"])
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 model = None
 scaler_X = None
 scaler_y = None
@@ -92,30 +103,26 @@ async def load_model():
     global model, scaler_X, scaler_y
 
     try:
-        # Download model and scaler files if missing
         download_file(MODEL_URL, MODEL_FILE)
         download_file(SCALER_X_URL, SCALER_X_FILE)
         download_file(SCALER_Y_URL, SCALER_Y_FILE)
 
-        # Load model
         model = MaizeYieldNN()
         model.load_state_dict(torch.load(MODEL_FILE, map_location=torch.device("cpu")))
         model.eval()
 
-        # Load scalers
         with open(SCALER_X_FILE, "rb") as f:
             scaler_X = pickle.load(f)
         with open(SCALER_Y_FILE, "rb") as f:
             scaler_y = pickle.load(f)
 
-        # Verify everything is loaded
         if model is None or scaler_X is None or scaler_y is None:
             raise ValueError("Model or scalers failed to load properly.")
 
-        print(" Model and scalers loaded successfully!")
+        print("Model and scalers loaded successfully!")
 
     except Exception as e:
-        print(f" Error loading model: {e}")
+        print(f"Error loading model: {e}")
         raise HTTPException(status_code=500, detail=f"Model loading error: {str(e)}")
 
 
@@ -127,14 +134,12 @@ def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
 
     warnings = []
 
-    # Clip values
     year_clipped = max(min(year, year_range[1] + 5), year_range[0])
     pesticides_clipped = max(
         min(pesticides, pesticides_range[1] * 1.2), pesticides_range[0]
     )
     temp_clipped = max(min(temp, temp_range[1] + 0.5), temp_range[0] - 0.5)
 
-    # Warnings
     if temp < temp_range[0] - 0.5 or temp > temp_range[1] + 0.5:
         warnings.append(
             f"Temperature {temp}°C outside training range ({temp_range[0]}–{temp_range[1]}°C)"
@@ -159,7 +164,7 @@ def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
 @app.get("/")
 async def root():
     return {
-        "message": " SmartGwiza Maize Yield Prediction API",
+        "message": "SmartGwiza Maize Yield Prediction API",
         "endpoints": {
             "/predict": "POST → Make a prediction",
             "/health": "GET → Check API health",
@@ -204,4 +209,4 @@ async def predict(request: PredictionRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8070)
