@@ -4,7 +4,6 @@
 **SmartGwiza** is an AI-powered web platform designed to assist farmers, agricultural experts, and policymakers by providing accurate historical crop yield data and future predictions.  
 This initial solution focuses on predicting **maize yield (hg/ha)** in **Rwanda**, supporting agricultural risk management and informed decision-making.
 
----
 
 ## Overview
 This repository contains a machine learning project to predict maize yield in Rwanda using historical data from **1990 to 2023**.  
@@ -33,8 +32,6 @@ These features support agricultural planning and policy development.
 
 The model was saved as **`maize_yield_model.pth`** to be used in making predictions.
 
----
-
 ##  Dataset
 The dataset is a CSV file with **33 rows**, containing:
 
@@ -45,8 +42,6 @@ The dataset is a CSV file with **33 rows**, containing:
 | `pesticides_tonnes` | Pesticide use (tonnes) | 97–2,500 |
 | `avg_temp` | Average temperature (°C) | 19.22–20.29 |
 
----
-
 ## Features
 - **Data Analysis**  
   Exploratory Data Analysis (EDA) using visualizations such as histograms, scatter plots, and correlation matrices.
@@ -56,8 +51,6 @@ The dataset is a CSV file with **33 rows**, containing:
 
 - **Prediction Tool**  
   Includes a `predict_yield` function with input validation and range checking.
-
----
 
 ## Installation
 
@@ -91,7 +84,6 @@ python -m venv venv
 source venv/bin/activate   # On Windows: venv\Scripts\activate
 ```
 
----
 
 ## Usage
 
@@ -101,7 +93,6 @@ Open **`SmartGwizaS.ipynb`** in Jupyter Notebook or Google Colab and run all cel
 - Train models  
 - Evaluate performance  
 
----
 
 ### Input Validation
 Inputs are validated and clipped to safe ranges:
@@ -111,7 +102,7 @@ Inputs are validated and clipped to safe ranges:
 | `pesticides_tonnes` | 97–3,000 |
 | `avg_temp` | 18.72–20.79°C |
 
----
+
 
 ##  FastAPI Integration
 
@@ -124,7 +115,6 @@ uvicorn main:app --reload
 Then open the interactive **Swagger UI** at:  
  [http://localhost:8000/docs](http://localhost:8070/docs)
 
----
 
 ###  API Endpoints
 
@@ -140,8 +130,6 @@ Predict maize yield based on input parameters.
 ```json
 {"predicted_yield": 18000}
 ```
-
----
 
 ##  Model Details
 
@@ -165,13 +153,11 @@ Predict maize yield based on input parameters.
   - MSE: 1,434,811  
   - MAE: 967  
 
----
 
 ##  Saved Model
 The best performing model (`maize_yield_model.pth`) is saved and automatically loaded during predictions.  
 Ensure this file is available in your project directory before running the API.
 
----
 
 ## Deployment
 
@@ -182,7 +168,6 @@ Ensure this file is available in your project directory before running the API.
 **Frontend Repository:**  
  [SmartGwiza Frontend](https://github.com/lilika67/SmartGwiza-system.git)
 
----
 
 ##  Frontend Web App
 You can test the frontend interface here:  
@@ -190,11 +175,20 @@ You can test the frontend interface here:
 The web app allows users to input year, pesticide usage, and average temperature to generate yield predictions.
 
 
----
-
 ## Summary
 SmartGwiza integrates **data science**, **AI**, and **web technologies** to provide actionable insights for Rwanda’s agriculture.  
 By combining historical trends and predictive models, it empowers decision makers to plan effectively for the future of maize production.
 
----
-** Technologies:** PyTorch • FastAPI • NumPy • Scikit-learn • Vercel • Render  
+** Technologies:
+** PyTorch • FastAPI • NumPy • Scikit-learn • Vercel • Render  
+
+## Related screenshot of UI
+
+<img width="2880" height="1404" alt="image" src="https://github.com/user-attachments/assets/7a6cfbe8-1e4d-4b50-bfce-8a425b8361e2" />
+
+<img width="2864" height="1394" alt="image" src="https://github.com/user-attachments/assets/296fb94c-9cca-4beb-b5de-2305071f4d0f" />
+
+<img width="2638" height="1432" alt="image" src="https://github.com/user-attachments/assets/0c0dab2a-b754-4c5f-acd6-b06ba7cb7b7a" />
+
+
+
