@@ -126,9 +126,9 @@ Predict maize yield based on input parameters.
 - `pesticides_tonnes` *(float)*: 97–3,000
 - `avg_temp` *(float)*: 18.72–20.79°C
 
-**Response:**
+**Example of response:**
 ```json
-{"predicted_yield": 18000}
+{"predicted_yield": 1.523tons/ha}
 ```
 
 ##  Model Details
