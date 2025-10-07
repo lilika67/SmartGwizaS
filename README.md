@@ -179,7 +179,8 @@ The web app allows users to input year, pesticide usage, and average temperature
 SmartGwiza integrates **data science**, **AI**, and **web technologies** to provide actionable insights for Rwanda’s agriculture.  
 By combining historical trends and predictive models, it empowers decision makers to plan effectively for the future of maize production.
 
-** Technologies:
+## Technologies:
+
 ** PyTorch • FastAPI • NumPy • Scikit-learn • Vercel • Render  
 
 ## Related screenshot of UI
