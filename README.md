@@ -177,6 +177,10 @@ You can test the frontend interface here:
  **Frontend Link ([FrontendLink](https://smartgwizasystem.vercel.app/))**  
 The web app allows users to input year, pesticide usage, and average temperature to generate yield predictions.
 
+##  Video Demo
+
+To see the SmartGwiza  demo you can  open[Video demo](https://drive.google.com/drive/folders/1UXNqDMK6_AYMFhj8wttsu_a0zuzZb28D?usp=drive_link)
+
 
 ## Summary
 SmartGwiza integrates **data science**, **AI**, and **web technologies** to provide actionable insights for Rwanda’s agriculture.  
