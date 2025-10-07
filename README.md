@@ -68,14 +68,17 @@ pip install -r requirements.txt
 
 Your `requirements.txt` should include:
 ```
-pandas
-numpy
-matplotlib
-seaborn
-scikit-learn
+setuptools>=69.0.0
+wheel
+numpy<2.0
+scikit-learn==1.6.1
 torch
+torchvision  
+torchaudio
 fastapi
-uvicorn
+uvicorn[standard]
+pydantic
+requests
 ```
 
 ### 3. Set Up a Virtual Environment
@@ -113,7 +116,7 @@ uvicorn main:app --reload
 ```
 
 Then open the interactive **Swagger UI** at:  
- [http://localhost:8000/docs](http://localhost:8070/docs)
+ [Swagger link](http://localhost:8070/docs)
 
 
 ###  API Endpoints
@@ -128,7 +131,7 @@ Predict maize yield based on input parameters.
 
 **Example of response:**
 ```json
-{"predicted_yield": 1.523tons/ha}
+{"predicted_yield": 1.523 tons/ha}
 ```
 
 ##  Model Details
