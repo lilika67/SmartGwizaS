@@ -131,7 +131,7 @@ Predict maize yield based on input parameters.
 
 **Example of response:**
 ```json
-"predicted_yield": 1.523 tons/ha
+{"predicted_yield": 1.523tons/ha}
 ```
 
 ##  Model Details
