@@ -1,35 +1,84 @@
-SmartGwiza - Maize Yield Prediction System
-Mission
-SmartGwiza is an AI-powered web platform designed to assist farmers, agricultural experts, and policymakers by providing accurate historical crop yield data and future predictions. This initial solution focuses on predicting maize yield (hg/ha) in Rwanda, supporting agricultural risk management and informed decision-making.
-Overview
-This repository contains a machine learning project to predict maize yield in Rwanda using historical data from 1990 to 2023. SmartGwiza is built with a three-part architecture: a frontend for user interaction, a backend using FastAPI for API services, and a machine learning component for predictive modeling. The dataset includes features such as Year, pesticides_tonnes, and avg_temp, aimed at enhancing agricultural planning and policy development. The project implements three models: a custom Neural Network (MaizeYieldNN), Linear Regression, and Polynomial Regression (Degree 2). The Neural Network, with an R² score of 0.931, MSE of 335,306, and MAE of 315, has been identified as the best-performing model and is saved for predictions.
-Dataset
-The dataset is a CSV file with 33 rows, including:
+#  SmartGwiza - Maize Yield Prediction System
 
-Year: 1990–2023 (gap in 2003)
-hg/ha_yield: 10,252–22,845 hg/ha
-pesticides_tonnes: 97–2,500 tonnes
-avg_temp: 19.22–20.29°C
+> **Empowering Rwanda’s agriculture with AI-driven insights.**  
+> SmartGwiza is an **AI-powered web platform** that predicts maize yield to support farmers, agricultural experts, and policymakers in **making data-informed decisions**.
 
-The data is embedded in the Jupyter notebook for reproducibility but can be updated with an external file if needed.
-Features
+---
 
-Data Analysis: Exploratory Data Analysis (EDA) with visualizations (histograms, correlation matrix, and scatter plots) to uncover yield patterns.
-Model Training: Implements and compares three predictive models using PyTorch (Neural Network) and NumPy (Linear and Polynomial Regression).
-Prediction Tool: Offers a predict_yield function with input validation to handle out-of-range values, ensuring robust predictions.
+##  Mission
 
-Installation
-To run this project locally, follow these steps:
+SmartGwiza aims to **assist agricultural stakeholders** in RRwanda by providing:
+- Accurate **historical maize yield data**
+- Reliable **future maize yield predictions**
+- Tools for **risk management** and **policy planning**
 
-Clone the Repository:
+---
+
+##  Overview
+
+SmartGwiza integrates machine learning and modern web technologies to predict **maize yield (hg/ha)** in Rwanda using historical data from **1990 to 2023**.
+
+###  System Architecture
+1. **Frontend:** Interactive web app (deployed on Vercel)  
+2. **Backend:** FastAPI REST API (deployed on Render)  
+3. **Machine Learning Engine:** Predictive modeling using PyTorch  
+
+---
+
+##  Dataset
+
+| Feature | Description | Range |
+|----------|--------------|--------|
+| **Year** | Crop year | 1990–2023 *(gap in 2003)* |
+| **hg/ha_yield** | Maize yield (hg/ha) | 10,252–22,845 |
+| **pesticides_tonnes** | Pesticides used (tonnes) | 97–2,500 |
+| **avg_temp** | Average annual temperature (°C) | 19.22–20.29 |
+
+
+---
+
+## 🔍 Features
+
+- **Data Analysis:**  
+  Visual exploration with histograms, scatter plots, and correlation matrices.
+- **Model Training:**  
+  Implements and compares three models:
+  - Custom Neural Network (`MaizeYieldNN`)
+  - Linear Regression
+  - Polynomial Regression (Degree 2)
+- **Prediction Tool:**  
+  Validated inputs and robust yield predictions.
+- **FastAPI Integration:**  
+  Real-time predictions via `/predict` endpoint on Swagger UI.
+
+---
+
+## 🧠 Model Performance
+
+| Model | R² Score | MSE | MAE |
+|--------|-----------|----------|----------|
+| **Neural Network (MaizeYieldNN)** | **0.931** | **335,306** | **315** |
+| Linear Regression | 0.931 | 338,282 | 395 |
+| Polynomial Regression (Degree 2) | 0.705 | 1,434,811 | 967 |
+
+>  **Best Model:** Neural Network (saved as `maize_yield_model.pth`)
+
+---
+
+## ⚙️ Installation
+
+### 1. Clone the Repository
+```bash
 git clone https://github.com/lilika67/SmartGwizaS.git
 cd SmartGwizaS
 
+2. Install Dependencies
 
-Install Dependencies:Ensure you have Python 3.8+ and pip installed. Then run:
+Ensure you have Python 3.8+ and pip installed, then run:
+
 pip install -r requirements.txt
 
-The requirements.txt file should include:
+requirements.txt includes:
 pandas
 numpy
 matplotlib
@@ -39,82 +88,61 @@ torch
 fastapi
 uvicorn
 
-
-Set Up Environment (Optional):
-
-Use a virtual environment for isolation:python -m venv venv
+3. (Optional) Create a Virtual Environment
+python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
+ Usage
+-Run the Jupyter Notebook
+
+-Open and execute all cells in:
+
+SmartGwizaS.ipynb
 
 
+This loads the data, performs EDA, trains models, and evaluates performance.
+
+ Input Validation
+Input	Valid Range
+Year	1990–2035
+pesticides_tonnes	97–3,000
+avg_temp	18.72–20.79°C
+
+Running FastAPI
+Run Locally
+uvicorn main:app --reload
 
 
-Usage
+Then open http://localhost:8000/docs
+ to:
 
-Run the Jupyter Notebook:
-
-Open SmartGwizaS.ipynb in Jupyter Notebook or Google Colab.
-Execute all cells sequentially to load data, perform EDA, train models, and evaluate performance.
-
-
-Inputs Validation:
-
-Inputs are validated and clipped to ranges: Year (1990–2028), pesticides_tonnes (97–3,000), avg_temp (18.72–20.79°C). Warnings are issued for out-of-range values.
-
-
-Making Predictions and Retraining via Swagger Local URL:
-
-Access the FastAPI Swagger UI locally at: http://localhost:8000/docs to make predictions or retrain the model.
-To run the FastAPI locally, use:uvicorn main:app --reload
-
-Ensure a main.py file with FastAPI setup is present (e.g., integrating the predict_yield function).
-
-
-
-How to Run the FastAPI in Production
-
-Deploy the FastAPI backend and access the Swagger UI at: Swagger UI.
-
-Deployment
-
-Machine Learning: The predictive models, including the saved maize_yield_model.pth, are developed and trained using Jupyter notebooks.
-Backend: Implemented with FastAPI and deployed on Render.
-Frontend: Developed as a user-friendly web app and deployed on Vercel.
-
+ Deployment
+Component	Technology	Platform
+Machine Learning	PyTorch, scikit-learn	Jupyter Notebook
+Backend	FastAPI	Render
+Frontend	React / Next.js	Vercel
 Frontend Repository
 
-Link: https://github.com/lilika67/SmartGwiza-system.git
+ SmartGwiza Frontend on GitHub
 
-How to Run the Frontend App
+ Live Frontend (User App)
 
-Test the user-friendly web app at: Frontend Link. This app enables easy access to all functionalities for predicting maize yields.
+Visit the deployed SmartGwiza web app here:
+🔗 Frontend Link (Add your Vercel URL)
 
-Model Details
+🧱 Model Architecture
 
-Neural Network (MaizeYieldNN):
-Architecture: 3 input nodes, two hidden layers (10 nodes each) with ReLU, 1 output node.
-Training: 200 epochs, Adam optimizer, MSE loss.
-Performance: R² 0.931, MSE 335,306, MAE 315.
+MaizeYieldNN Neural Network
 
+3 input nodes (Year, pesticides_tonnes, avg_temp)
 
-Linear Regression: Simple least squares fit, R² 0.931, MSE 338,282, MAE 395.
-Polynomial Regression (Degree 2): Includes quadratic and interaction terms, R² 0.705, MSE 1,434,811, MAE 967.
+2 hidden layers (10 neurons each, ReLU activation)
 
-Saved Model
-The best model (maize_yield_model.pth) is saved after training and loaded for predictions. Ensure the file is in the working directory.
-Contributing
-Contributions are welcome! To contribute:
+1 output node (Predicted maize yield)
 
-Fork the repository.
-Create a new branch (git checkout -b feature-branch).
-Make changes and commit (git commit -m "Description of changes").
-Push to the branch (git push origin feature-branch).
-Open a Pull Request with a clear description of your changes.
+Trained for 5000 epochs using Adam optimizer and MSE loss
 
-Please follow PEP 8 style guidelines and include tests or documentation updates.
-License
-This project is licensed under the MIT License - see the LICENSE file for details.
-Acknowledgments
+🪄 Saved Model
 
-Thanks to xAI for providing Grok AI assistance in developing this project.
-Inspired by agricultural studies and data from Rwanda.
+The best model (maize_yield_model.pth) is automatically saved after training and used for predictions.
+Ensure this file is present in your working directory when running the FastAPI app.
