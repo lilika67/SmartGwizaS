@@ -322,7 +322,7 @@ async def health_check():
     """Check if authentication service is running."""
     try:
         client = MongoClient(MONGO_URI)
-        client.server_info()  # Test connection
+        client.server_info()  
         client.close()
         return {"status": "healthy", "database_connected": True}
     except Exception as e:
