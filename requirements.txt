@@ -10,3 +10,4 @@ uvicorn[standard]
 pydantic
 requests
 pymongo
+passlib
