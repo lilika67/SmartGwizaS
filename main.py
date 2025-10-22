@@ -1,39 +1,64 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware  # Add this import
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from auth import get_current_user, get_db  # Import for authentication
 import torch
 import torch.nn as nn
 import numpy as np
 import pickle
-from typing import Optional
+from typing import Optional, List
 import uvicorn
 import os
 import requests
+import logging
+from auth import app as auth_app
+from pymongo import MongoClient
+from dotenv import load_dotenv
+from datetime import datetime
 
 # ==== CONFIGURATION ====
-MODEL_FILE = "maize_yield_model.pth"
-SCALER_X_FILE = "scaler_X.pkl"
-SCALER_Y_FILE = "scaler_y.pkl"
+load_dotenv()
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MODEL_FILE = "/Users/liliane/Documents/SmartGwizaS/maize_yield_model.pth"
+SCALER_X_FILE = "/Users/liliane/Documents/SmartGwizaS/scaler_X.pkl"
+SCALER_Y_FILE = "/Users/liliane/Documents/SmartGwizaS/scaler_y.pkl"
 
-MODEL_URL = "https://drive.google.com/uc?id=1TLNhNJTnxIfwU8vyn_TSfhU1H-UnA947"
-SCALER_X_URL = "https://drive.google.com/uc?id=1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
-SCALER_Y_URL = "https://drive.google.com/uc?id=1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
+MODEL_URL = (
+    "https://drive.google.com/uc?export=download&id=1TLNhNJTnxIfwU8vyn_TSfhU1H-UnA947"
+)
+SCALER_X_URL = (
+    "https://drive.google.com/uc?export=download&id=1iMsDS21VzSc3u0Gv3Pe2l00oRhOZIQMB"
+)
+SCALER_Y_URL = (
+    "https://drive.google.com/uc?export=download&id=1sXkrxP9dQ76gOpxFjJcruLp53ORGUH94"
+)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def download_file(url, destination):
     """Download file from URL if not already present."""
     if not os.path.exists(destination):
-        print(f"Downloading {destination} from {url} ...")
-        response = requests.get(url)
-        if response.status_code != 200:
-            raise Exception(
-                f"Failed to download {destination} (status {response.status_code})"
-            )
-        with open(destination, "wb") as f:
-            f.write(response.content)
-        print(f"{destination} downloaded successfully.")
+        logger.info(f"Downloading {destination} from {url}...")
+        try:
+            response = requests.get(url, stream=True)
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to download {destination} (status {response.status_code})",
+                )
+            with open(destination, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            logger.info(f"{destination} downloaded successfully.")
+        except Exception as e:
+            logger.error(f"Download error for {destination}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Download error: {str(e)}")
     else:
-        print(f"{destination} already exists. Skipping download.")
+        logger.info(f"{destination} already exists. Skipping download.")
 
 
 # ==== MODEL ARCHITECTURE ====
@@ -61,32 +86,50 @@ class PredictionRequest(BaseModel):
     avg_temp: float = Field(
         ..., ge=19, le=21, description="Average temperature in Celsius"
     )
+    token: str = Field(..., description="JWT token from /auth/login")
 
     class Config:
         schema_extra = {
-            "example": {"year": 2024, "pesticides_tonnes": 2600, "avg_temp": 19.6}
+            "example": {
+                "year": 2024,
+                "pesticides_tonnes": 2600,
+                "avg_temp": 19.6,
+                "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            }
         }
 
 
 class PredictionResponse(BaseModel):
     predicted_yield: float
     unit: str = "hg/ha"
+    phone_number: str
     warning: Optional[str] = None
+
+
+class UserPrediction(BaseModel):
+    year: int
+    pesticides_tonnes: float
+    avg_temp: float
+    predicted_yield: float
+    unit: str
+    warning: Optional[str]
+    timestamp: datetime
 
 
 # ==== INITIALIZATION ====
 app = FastAPI(
     title="SmartGwiza Maize Yield Prediction API",
-    description="API for predicting maize yield based on year, pesticides, and temperature",
+    description="API for predicting maize yield and user authentication",
     version="1.0.0",
 )
+
+# Mount the authentication app
+app.include_router(auth_app.router, prefix="/auth", tags=["auth"])
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "*"
-    ],  # Replace with specific origins in production (e.g., ["https://your-vercel-app.vercel.app"])
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -119,10 +162,10 @@ async def load_model():
         if model is None or scaler_X is None or scaler_y is None:
             raise ValueError("Model or scalers failed to load properly.")
 
-        print("Model and scalers loaded successfully!")
+        logger.info("Model and scalers loaded successfully!")
 
     except Exception as e:
-        print(f"Error loading model: {e}")
+        logger.error(f"Error loading model: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Model loading error: {str(e)}")
 
 
@@ -161,13 +204,18 @@ def validate_and_clip_inputs(year: int, pesticides: float, temp: float):
     )
 
 
+# ==== ENDPOINTS ====
 @app.get("/")
 async def root():
     return {
         "message": "SmartGwiza Maize Yield Prediction API",
         "endpoints": {
-            "/predict": "POST → Make a prediction",
+            "/predict": "POST → Make a prediction (requires token in body)",
+            "/predictions": "GET → Get all predictions for the authenticated user",
             "/health": "GET → Check API health",
+            "/auth/signup": "POST → Create a new user account",
+            "/auth/login": "POST → Authenticate a user",
+            "/auth/health": "GET → Check authentication service health",
             "/docs": "GET → Interactive API documentation",
         },
     }
@@ -181,11 +229,15 @@ async def health_check():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(request: PredictionRequest):
+async def predict(
+    request: PredictionRequest, user=Depends(get_current_user), db=Depends(get_db)
+):
+    """Predict maize yield for authenticated users and save to MongoDB."""
     if model is None or scaler_X is None or scaler_y is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
     try:
+        logger.info(f"Prediction request by user: {user['phone_number']}")
         year, pesticides, temp, warning = validate_and_clip_inputs(
             request.year, request.pesticides_tonnes, request.avg_temp
         )
@@ -200,13 +252,46 @@ async def predict(request: PredictionRequest):
 
         predicted_yield = max(float(pred[0][0]), 0)
 
+        # Save prediction to MongoDB
+        prediction_data = {
+            "phone_number": user["phone_number"],
+            "year": request.year,
+            "pesticides_tonnes": request.pesticides_tonnes,
+            "avg_temp": request.avg_temp,
+            "predicted_yield": round(predicted_yield, 2),
+            "unit": "hg/ha",
+            "warning": warning,
+            "timestamp": datetime.utcnow(),
+        }
+        db["predictions"].insert_one(prediction_data)
+        logger.info(f"Prediction saved for user: {user['phone_number']}")
+
         return PredictionResponse(
-            predicted_yield=round(predicted_yield, 2), warning=warning
+            predicted_yield=round(predicted_yield, 2),
+            phone_number=user["phone_number"],
+            warning=warning,
         )
 
     except Exception as e:
+        logger.error(f"Prediction error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
 
 
+@app.get("/predictions", response_model=List[UserPrediction])
+async def get_predictions(user=Depends(get_current_user), db=Depends(get_db)):
+    """Get all predictions for the authenticated user."""
+    try:
+        logger.info(f"Fetching predictions for user: {user['phone_number']}")
+        predictions = list(
+            db["predictions"].find({"phone_number": user["phone_number"]}, {"_id": 0})
+        )
+        return predictions
+    except Exception as e:
+        logger.error(f"Error fetching predictions: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching predictions: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8070)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
