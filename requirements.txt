@@ -11,3 +11,4 @@ pydantic
 requests
 pymongo
 passlib
+python-jose[cryptography]
