@@ -1,3 +1,4 @@
+pip==25.2
 setuptools>=69.0.0
 wheel
 numpy<2.0

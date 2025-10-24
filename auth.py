@@ -16,7 +16,7 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DATABASE_NAME = "smartgwiza"
 COLLECTION_NAME = "users"
-SECRET_KEY = os.getenv("SECRET_KEY")  
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -38,6 +38,7 @@ class UserSignupRequest(BaseModel):
     password: str = Field(
         ..., min_length=8, description="Password (8–72 characters, maximum 72 bytes)"
     )
+    role: str = Field(..., description="User role: 'farmer' or 'admin'")
 
     @validator("password")
     def check_password_length(cls, password):
@@ -47,12 +48,19 @@ class UserSignupRequest(BaseModel):
             )
         return password
 
+    @validator("role")
+    def validate_role(cls, role):
+        if role not in ["farmer", "admin"]:
+            raise ValueError("Role must be 'farmer' or 'admin'")
+        return role
+
     class Config:
         schema_extra = {
             "example": {
                 "fullname": "John Doe",
                 "phone_number": "+250781234567",
                 "password": "secure123",
+                "role": "farmer",
             }
         }
 
@@ -60,6 +68,7 @@ class UserSignupRequest(BaseModel):
 class UserSignupResponse(BaseModel):
     fullname: str
     phone_number: str
+    role: str
     message: str = "User created successfully"
 
     class Config:
@@ -67,6 +76,7 @@ class UserSignupResponse(BaseModel):
             "example": {
                 "fullname": "John Doe",
                 "phone_number": "+250781234567",
+                "role": "farmer",
                 "message": "User created successfully",
             }
         }
@@ -80,16 +90,14 @@ class UserLoginRequest(BaseModel):
 
     class Config:
         schema_extra = {
-            "example": {
-                "phone_number": "+250781234567",
-                "password": "secure123",
-            }
+            "example": {"phone_number": "+250781234567", "password": "secure123"}
         }
 
 
 class UserLoginResponse(BaseModel):
     fullname: str
     phone_number: str
+    role: str
     access_token: str
     token_type: str = "bearer"
     message: str = "Login successful"
@@ -99,6 +107,7 @@ class UserLoginResponse(BaseModel):
             "example": {
                 "fullname": "John Doe",
                 "phone_number": "+250781234567",
+                "role": "farmer",
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
                 "message": "Login successful",
@@ -128,7 +137,6 @@ def get_db():
 def validate_rwandan_phone(phone: str) -> str:
     """Validate and normalize Rwandan phone number."""
     phone = re.sub(r"\s+", "", phone)
-
     if phone.startswith("+250"):
         phone = phone
     elif phone.startswith("250"):
@@ -140,13 +148,11 @@ def validate_rwandan_phone(phone: str) -> str:
             status_code=400,
             detail="Invalid Rwandan phone number. Must start with +250, 250, or 0 followed by 78/79/72/73 and 7 digits.",
         )
-
     if not re.match(r"^\+250(78|79|72|73)\d{7}$", phone):
         raise HTTPException(
             status_code=400,
             detail="Invalid Rwandan phone number format. Must be +250 followed by 78/79/72/73 and 7 digits.",
         )
-
     return phone
 
 
@@ -161,15 +167,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_user(db, fullname: str, phone_number: str, password: str):
+def create_user(db, fullname: str, phone_number: str, password: str, role: str):
     """Create a new user in MongoDB."""
-    logger.info(f"Creating user with phone_number: {phone_number}")
+    logger.info(f"Creating user with phone_number: {phone_number}, role: {role}")
     try:
         password_hash = hash_password(password)
         user = {
             "fullname": fullname,
             "phone_number": phone_number,
             "password_hash": password_hash,
+            "role": role,
         }
         result = db[COLLECTION_NAME].insert_one(user)
         if not result.inserted_id:
@@ -183,7 +190,7 @@ def create_user(db, fullname: str, phone_number: str, password: str):
         )
     except Exception as e:
         logger.error(f"Error creating user {phone_number}: {str(e)}")
-        if "E11000" in str(e):  # MongoDB duplicate key error
+        if "E11000" in str(e):
             raise HTTPException(
                 status_code=400, detail="Phone number already registered"
             )
@@ -200,7 +207,11 @@ def authenticate_user(db, phone_number: str, password: str):
     if not verify_password(password, user["password_hash"]):
         logger.warning(f"Invalid password for user: {phone_number}")
         raise HTTPException(status_code=401, detail="Invalid phone number or password")
-    logger.info(f"User authenticated successfully: {phone_number}")
+    # Assign default role if missing
+    user["role"] = user.get("role", "farmer")
+    logger.info(
+        f"User authenticated successfully: {phone_number}, role: {user['role']}"
+    )
     return user
 
 
@@ -226,13 +237,16 @@ async def get_current_user(token: str, db=Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         phone_number: str = payload.get("sub")
-        if phone_number is None:
+        role: str = payload.get("role")
+        if phone_number is None or role is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
     user = db[COLLECTION_NAME].find_one({"phone_number": phone_number})
     if user is None:
         raise credentials_exception
+    # Ensure role is present
+    user["role"] = user.get("role", "farmer")
     return user
 
 
@@ -263,10 +277,13 @@ async def signup(request: UserSignupRequest, db=Depends(get_db)):
     """Create a new user account."""
     try:
         normalized_phone = validate_rwandan_phone(request.phone_number)
-        create_user(db, request.fullname, normalized_phone, request.password)
+        create_user(
+            db, request.fullname, normalized_phone, request.password, request.role
+        )
         return UserSignupResponse(
             fullname=request.fullname,
             phone_number=normalized_phone,
+            role=request.role,
             message="User created successfully",
         )
     except HTTPException as e:
@@ -294,11 +311,13 @@ async def login(request: UserLoginRequest, db=Depends(get_db)):
         user = authenticate_user(db, normalized_phone, request.password)
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": normalized_phone}, expires_delta=access_token_expires
+            data={"sub": normalized_phone, "role": user["role"]},
+            expires_delta=access_token_expires,
         )
         return UserLoginResponse(
             fullname=user["fullname"],
             phone_number=normalized_phone,
+            role=user["role"],
             access_token=access_token,
             token_type="bearer",
             message="Login successful",
@@ -322,7 +341,7 @@ async def health_check():
     """Check if authentication service is running."""
     try:
         client = MongoClient(MONGO_URI)
-        client.server_info()  
+        client.server_info()
         client.close()
         return {"status": "healthy", "database_connected": True}
     except Exception as e:

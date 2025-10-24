@@ -1,19 +1,19 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from auth import get_current_user, get_db  # Import for authentication
+from pydantic import BaseModel, Field, validator
+from auth import get_current_user, get_db
 import torch
 import torch.nn as nn
 import numpy as np
 import pickle
 from typing import Optional, List
 import uvicorn
+from dotenv import load_dotenv
 import os
 import requests
 import logging
 from auth import app as auth_app
 from pymongo import MongoClient
-from dotenv import load_dotenv
 from datetime import datetime
 
 # ==== CONFIGURATION ====
@@ -107,19 +107,77 @@ class PredictionResponse(BaseModel):
 
 
 class UserPrediction(BaseModel):
+    phone_number: str
     year: int
     pesticides_tonnes: float
     avg_temp: float
     predicted_yield: float
-    unit: str
-    warning: Optional[str]
+    unit: str = "hg/ha"
+    warning: Optional[str] = None
+    timestamp: datetime
+
+
+class ActualYieldSubmission(BaseModel):
+    crop_type: str = Field(..., description="Crop type: Maize or Beans")
+    harvest_date: str = Field(
+        ..., description="Harvest date (month/year, e.g., 10/2025)"
+    )
+    actual_yield: float = Field(..., ge=0, description="Actual yield (tons/ha)")
+    farm_size: float = Field(..., ge=0, description="Farm size (ha)")
+    location: str = Field(..., description="Location (e.g., Rwanda district)")
+    avg_temp: float = Field(
+        ..., ge=15, le=35, description="Average temperature in Celsius"
+    )
+    notes: Optional[str] = Field(None, description="Additional notes")
+    token: str = Field(..., description="JWT token from /auth/login")
+
+    @validator("crop_type")
+    def validate_crop_type(cls, value):
+        if value not in ["Maize", "Beans"]:
+            raise ValueError("Crop type must be 'Maize' or 'Beans'")
+        return value
+
+    @validator("harvest_date")
+    def validate_harvest_date(cls, value):
+        try:
+            datetime.strptime(value, "%m/%Y")
+        except ValueError:
+            raise ValueError("Harvest date must be in MM/YYYY format")
+        return value
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "crop_type": "Maize",
+                "harvest_date": "10/2025",
+                "actual_yield": 5.2,
+                "farm_size": 2.5,
+                "location": "Kigali",
+                "avg_temp": 19.6,
+                "notes": "Good harvest due to favorable weather",
+                "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            }
+        }
+
+
+class ActualYieldResponse(BaseModel):
+    message: str = "Submission successful"
+    phone_number: str
+
+
+class ActualYieldRecord(BaseModel):
+    crop_type: str
+    harvest_year: int
+    actual_yield: float
+    avg_temp: float
+    phone_number: str
     timestamp: datetime
 
 
 # ==== INITIALIZATION ====
 app = FastAPI(
     title="SmartGwiza Maize Yield Prediction API",
-    description="API for predicting maize yield and user authentication",
+    description="API for predicting maize yield, submitting actual yield, retrieving yields, and user authentication",
     version="1.0.0",
 )
 
@@ -129,7 +187,7 @@ app.include_router(auth_app.router, prefix="/auth", tags=["auth"])
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],  # Update for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -211,7 +269,9 @@ async def root():
         "message": "SmartGwiza Maize Yield Prediction API",
         "endpoints": {
             "/predict": "POST → Make a prediction (requires token in body)",
-            "/predictions": "GET → Get all predictions for the authenticated user",
+            "/predictions": "GET → Get predictions (farmer: own predictions; admin: all predictions)",
+            "/submit-actual-yield": "POST → Submit actual yield data (requires token in body)",
+            "/actual-yields": "GET → Get actual yield submissions (farmer: own; admin: all)",
             "/health": "GET → Check API health",
             "/auth/signup": "POST → Create a new user account",
             "/auth/login": "POST → Authenticate a user",
@@ -279,17 +339,88 @@ async def predict(
 
 @app.get("/predictions", response_model=List[UserPrediction])
 async def get_predictions(user=Depends(get_current_user), db=Depends(get_db)):
-    """Get all predictions for the authenticated user."""
+    """Get predictions for the authenticated user (farmer: own; admin: all)."""
     try:
-        logger.info(f"Fetching predictions for user: {user['phone_number']}")
-        predictions = list(
-            db["predictions"].find({"phone_number": user["phone_number"]}, {"_id": 0})
+        logger.info(
+            f"Fetching predictions for user: {user['phone_number']}, role: {user['role']}"
         )
+        if user["role"] == "admin":
+            predictions = list(db["predictions"].find({}, {"_id": 0}))
+        else:
+            predictions = list(
+                db["predictions"].find(
+                    {"phone_number": user["phone_number"]}, {"_id": 0}
+                )
+            )
         return predictions
     except Exception as e:
         logger.error(f"Error fetching predictions: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error fetching predictions: {str(e)}"
+        )
+
+
+@app.post("/submit-actual-yield", response_model=ActualYieldResponse)
+async def submit_actual_yield(
+    request: ActualYieldSubmission, user=Depends(get_current_user), db=Depends(get_db)
+):
+    """Submit actual yield data for authenticated users and save to MongoDB."""
+    try:
+        logger.info(f"Actual yield submission by user: {user['phone_number']}")
+        actual_yield_data = {
+            "phone_number": user["phone_number"],
+            "crop_type": request.crop_type,
+            "harvest_date": request.harvest_date,
+            "actual_yield": request.actual_yield,
+            "farm_size": request.farm_size,
+            "location": request.location,
+            "avg_temp": request.avg_temp,
+            "notes": request.notes,
+            "timestamp": datetime.utcnow(),
+        }
+        db["actual_yields"].insert_one(actual_yield_data)
+        logger.info(f"Actual yield saved for user: {user['phone_number']}")
+        return ActualYieldResponse(
+            message="Submission successful", phone_number=user["phone_number"]
+        )
+    except Exception as e:
+        logger.error(f"Submission error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Submission error: {str(e)}")
+
+
+@app.get("/actual-yields", response_model=List[ActualYieldRecord])
+async def get_actual_yields(user=Depends(get_current_user), db=Depends(get_db)):
+    """Get actual yield submissions (farmer: own; admin: all)."""
+    try:
+        logger.info(
+            f"Fetching actual yields for user: {user['phone_number']}, role: {user['role']}"
+        )
+        if user["role"] == "admin":
+            yields = list(db["actual_yields"].find({}, {"_id": 0}))
+        else:
+            yields = list(
+                db["actual_yields"].find(
+                    {"phone_number": user["phone_number"]}, {"_id": 0}
+                )
+            )
+
+        # Extract year from harvest_date
+        for yield_data in yields:
+            try:
+                yield_data["harvest_year"] = int(
+                    yield_data["harvest_date"].split("/")[1]
+                )
+            except (ValueError, IndexError):
+                yield_data["harvest_year"] = None  # Handle invalid formats gracefully
+            # Remove fields not in ActualYieldRecord
+            for field in ["farm_size", "location", "notes", "harvest_date"]:
+                yield_data.pop(field, None)
+
+        return yields
+    except Exception as e:
+        logger.error(f"Error fetching actual yields: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error fetching actual yields: {str(e)}"
         )
 
 
