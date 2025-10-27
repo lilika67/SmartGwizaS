@@ -1,7 +1,7 @@
 # Virtual environment
 myenv/
 venv/
-.env
+*.env
 
 # Large binary files
 *.pth
