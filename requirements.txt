@@ -1,6 +1,6 @@
-pip==25.2
-setuptools>=69.0.0
-wheel
+pip>=25.3
+setuptools>=75.1.0
+wheel>=0.44.0
 scikit-learn==1.6.1
 torchvision  
 torchaudio
