@@ -9,7 +9,7 @@ passlib
 python-jose[cryptography]
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-torch==2.1.0
+torch
 numpy==1.24.3
 pydantic==2.5.0
 requests==2.31.0
