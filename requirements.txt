@@ -7,3 +7,4 @@ pymongo==4.10.1
 passlib==1.7.4
 bcrypt==3.2.2
 torch==2.9.0
+pandas==2.2.3
